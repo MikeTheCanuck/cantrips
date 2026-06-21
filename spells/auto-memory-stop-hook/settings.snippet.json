@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/save-session-memory.sh",
+            "statusMessage": "Saving session memory...",
+            "asyncRewake": true
+          }
+        ]
+      }
+    ]
+  }
+}
