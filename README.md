@@ -1,6 +1,6 @@
 # cantrips
 
-Small, reusable tricks for agentic CLI tools — mostly Claude Code, for now. Each one is a self-contained "spell": copy a few files into place, get the behavior.
+Small, reusable tricks for agentic CLI tools - mostly Claude Code, for now. Each one is a self-contained "spell": copy a few files into place, get the behavior.
 
 Not a framework, not a plugin system. Just a place to keep the tricks that are easy to forget you set up and annoying to reconstruct from memory.
 

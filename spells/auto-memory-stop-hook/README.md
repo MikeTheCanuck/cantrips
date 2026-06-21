@@ -1,6 +1,6 @@
 # auto-memory-stop-hook
 
-Claude Code has a native "auto-memory" feature: it writes structured memory files to `~/.claude/projects/<bucket>/memory/`, indexed by a `MEMORY.md`. It's on by default — but it fires *heuristically*. The model decides, turn by turn, whether something was "worth" saving. In practice, useful context gets dropped silently more often than you'd like.
+Claude Code has a native "auto-memory" feature: it writes structured memory files to `~/.claude/projects/<bucket>/memory/`, indexed by a `MEMORY.md`. It's on by default, but it fires *heuristically*. The model decides, turn by turn, whether something was "worth" saving. In practice, useful context gets dropped silently more often than you'd like.
 
 This spell doesn't reimplement memory. It adds a `Stop` hook that forces Claude to actually check in on memory at the end of every single turn, instead of leaving it to the model's judgment.
 
@@ -27,7 +27,7 @@ This spell doesn't reimplement memory. It adds a `Stop` hook that forces Claude 
    jq -s '.[0] * .[1]' ~/.claude/settings.json settings.snippet.json > /tmp/settings.merged.json \
      && mv /tmp/settings.merged.json ~/.claude/settings.json
    ```
-   If you already have other `Stop` hooks configured, merge by hand instead — `jq`'s `*` operator on objects doesn't merge array values, it replaces them.
+   If you already have other `Stop` hooks configured, merge by hand instead: `jq`'s `*` operator on objects doesn't merge array values, it replaces them.
 3. (Optional) Append `claude-md-snippet.md` to your global `~/.claude/CLAUDE.md`. This shapes *what* gets saved (proactive saving, cross-project bucket sanitization) once the hook makes saving reliable. The hook works without it.
 4. Restart Claude Code.
 
