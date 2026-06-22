@@ -239,6 +239,67 @@ test_dry_run_settings_makes_no_changes() {
   return $result
 }
 
+test_claude_md_absent_and_user_declines_creates_nothing() {
+  local fake_home
+  fake_home="$(make_fake_home)"
+  HOME="$fake_home" "$INSTALL_SH" <<< "n" >/dev/null 2>&1
+  assert_file_absent "${fake_home}/.claude/CLAUDE.md" "CLAUDE.md should not be created when declined"
+  local result=$?
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_claude_md_absent_and_user_accepts_appends_snippet() {
+  local fake_home
+  fake_home="$(make_fake_home)"
+  HOME="$fake_home" "$INSTALL_SH" <<< "y" >/dev/null 2>&1
+  local claude_md="${fake_home}/.claude/CLAUDE.md"
+  local result=0
+  assert_file_exists "$claude_md" "CLAUDE.md should be created when accepted" || { rm -rf "$fake_home"; return 1; }
+  grep -q "## Memory Management" "$claude_md" || { echo "    FAIL: snippet heading not found in CLAUDE.md"; result=1; }
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_claude_md_marker_already_present_skips_without_prompting() {
+  local fake_home
+  fake_home="$(make_fake_home)"
+  mkdir -p "${fake_home}/.claude"
+  cat > "${fake_home}/.claude/CLAUDE.md" <<'EOF'
+# My existing CLAUDE.md
+
+## Memory Management
+
+Pre-existing sentinel text that must not be duplicated.
+EOF
+  local before
+  before="$(cat "${fake_home}/.claude/CLAUDE.md")"
+  HOME="$fake_home" "$INSTALL_SH" < /dev/null >/dev/null 2>&1
+  local status=$?
+  local after
+  after="$(cat "${fake_home}/.claude/CLAUDE.md")"
+  local result=0
+  [ "$status" -eq 0 ] || { echo "    FAIL: install.sh should not hang/error when marker already present (exit ${status})"; result=1; }
+  assert_eq "$before" "$after" "CLAUDE.md should be untouched when marker already present" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_dry_run_claude_md_prints_would_prompt_and_writes_nothing() {
+  local fake_home output
+  fake_home="$(make_fake_home)"
+  output="$(HOME="$fake_home" "$INSTALL_SH" --dry-run < /dev/null 2>&1)"
+  local result=0
+  assert_file_absent "${fake_home}/.claude/CLAUDE.md" "dry-run must not create CLAUDE.md" || result=1
+  assert_contains "$output" "claude-md-snippet.md" "dry-run should describe the CLAUDE.md change it would offer" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
+run_test "CLAUDE.md absent and user declines creates nothing" test_claude_md_absent_and_user_declines_creates_nothing
+run_test "CLAUDE.md absent and user accepts appends snippet" test_claude_md_absent_and_user_accepts_appends_snippet
+run_test "CLAUDE.md marker already present skips without prompting" test_claude_md_marker_already_present_skips_without_prompting
+run_test "dry-run CLAUDE.md prints would-prompt and writes nothing" test_dry_run_claude_md_prints_would_prompt_and_writes_nothing
 run_test "missing jq exits nonzero with hint" test_missing_jq_exits_nonzero_with_hint
 run_test "fresh install copies hook and sets executable" test_fresh_install_copies_hook_and_sets_executable
 run_test "dry-run does not copy hook and prints would message" test_dry_run_does_not_copy_hook_and_prints_would_message

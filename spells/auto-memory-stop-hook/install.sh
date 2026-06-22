@@ -78,3 +78,20 @@ else
     CHANGED=true
   fi
 fi
+
+# Step 4: CLAUDE.md snippet prompt
+if [ -f "$CLAUDE_MD_FILE" ] && grep -q "## Memory Management" "$CLAUDE_MD_FILE"; then
+  : # already present, no-op, never prompt
+else
+  if $DRY_RUN; then
+    echo "Would prompt to append ${CLAUDE_MD_SNIPPET} to ${CLAUDE_MD_FILE} (no existing ## Memory Management section found)"
+  else
+    REPLY=""
+    read -r -p "Also append a CLAUDE.md snippet that tells Claude to save memory proactively during a session (not just when this hook checkpoints it) and to write memory to the correct per-project bucket when working across multiple projects? [y/N] " REPLY || true
+    if [[ "$REPLY" =~ ^[Yy]$ ]]; then
+      mkdir -p "$CLAUDE_DIR"
+      printf '\n%s\n' "$(cat "$CLAUDE_MD_SNIPPET")" >> "$CLAUDE_MD_FILE"
+      CHANGED=true
+    fi
+  fi
+fi
