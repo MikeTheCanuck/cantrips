@@ -95,3 +95,13 @@ else
     fi
   fi
 fi
+
+# Step 5: closing summary
+if $DRY_RUN; then
+  exit 0
+fi
+if $CHANGED; then
+  echo "Installed/updated. Restart Claude Code to pick up the new hook."
+else
+  echo "Already installed. No changes made."
+fi

@@ -15,7 +15,24 @@ This spell doesn't reimplement memory. It adds a `Stop` hook that forces Claude 
 1. **First `Stop`** of a turn: no sentinel file exists yet. It creates one (`/tmp/claude-memory-wakeup-<session_id>`), then exits with code `2` and a `systemMessage` telling Claude to review the conversation and save anything worth keeping via the `Write` tool. Exit code `2` plus `asyncRewake: true` (set in the settings snippet) wakes Claude back up to act on that message.
 2. **Second `Stop`**, after Claude finishes the memory-save turn: the sentinel exists, so the script deletes it and exits `0` cleanly. No loop.
 
+## Prerequisites
+
+- `jq`
+- `bash`
+
+(The Claude Code version requirement is covered above, in "Hard dependency" — this section is just what `install.sh` itself needs.)
+
 ## Install
+
+```bash
+./install.sh
+```
+
+This copies the hook into `~/.claude/hooks/`, safely merges `settings.snippet.json` into `~/.claude/settings.json` (appending to any existing `Stop` hooks rather than overwriting them), and asks whether to also append the optional CLAUDE.md snippet. Re-running it is safe — it only changes what actually needs to change. Run `./install.sh --dry-run` first if you want to see exactly what it would do before it touches anything.
+
+## Manual install (advanced)
+
+If you'd rather control each step yourself, or don't have `jq` installed, here's exactly what `install.sh` does under the hood:
 
 1. Copy the hook script:
    ```bash

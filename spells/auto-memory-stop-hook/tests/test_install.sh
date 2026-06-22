@@ -296,6 +296,53 @@ test_dry_run_claude_md_prints_would_prompt_and_writes_nothing() {
   return $result
 }
 
+test_first_run_prints_installed_message() {
+  local fake_home output
+  fake_home="$(make_fake_home)"
+  output="$(HOME="$fake_home" "$INSTALL_SH" <<< "n" 2>&1)"
+  local result=0
+  assert_contains "$output" "Installed/updated" "first run should report it installed/updated something" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_second_run_on_unchanged_system_prints_already_installed() {
+  local fake_home
+  fake_home="$(make_fake_home)"
+  HOME="$fake_home" "$INSTALL_SH" <<< "n" >/dev/null 2>&1
+  local output
+  output="$(HOME="$fake_home" "$INSTALL_SH" <<< "n" 2>&1)"
+  local result=0
+  assert_contains "$output" "Already installed. No changes made." "second run on unchanged system should report no-op" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_dry_run_full_run_makes_zero_filesystem_changes() {
+  local fake_home status
+  fake_home="$(make_fake_home)"
+  HOME="$fake_home" "$INSTALL_SH" --dry-run < /dev/null >/dev/null 2>&1
+  status=$?
+  local result=0
+  [ "$status" -eq 0 ] || { echo "    FAIL: dry-run should exit 0 (got ${status})"; result=1; }
+  assert_file_absent "${fake_home}/.claude/hooks/save-session-memory.sh" "dry-run should not create the hook" || result=1
+  assert_file_absent "${fake_home}/.claude/settings.json" "dry-run should not create settings.json" || result=1
+  assert_file_absent "${fake_home}/.claude/CLAUDE.md" "dry-run should not create CLAUDE.md" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_readme_has_prerequisites_section() {
+  grep -q "^## Prerequisites" "${SPELL_DIR}/README.md"
+}
+
+test_readme_install_section_leads_with_script_and_has_manual_section() {
+  local result=0
+  grep -q "\./install\.sh" "${SPELL_DIR}/README.md" || { echo "    FAIL: README should reference ./install.sh"; result=1; }
+  grep -q "^## Manual install" "${SPELL_DIR}/README.md" || { echo "    FAIL: README should have a Manual install section"; result=1; }
+  return $result
+}
+
 run_test "CLAUDE.md absent and user declines creates nothing" test_claude_md_absent_and_user_declines_creates_nothing
 run_test "CLAUDE.md absent and user accepts appends snippet" test_claude_md_absent_and_user_accepts_appends_snippet
 run_test "CLAUDE.md marker already present skips without prompting" test_claude_md_marker_already_present_skips_without_prompting
@@ -309,6 +356,11 @@ run_test "settings with other Stop hook appends not replaces" test_settings_with
 run_test "settings with no Stop key sets it and preserves other keys" test_settings_with_no_stop_key_sets_it_and_preserves_other_keys
 run_test "backup filename is ISO 8601 not Unix epoch" test_backup_filename_is_iso8601_not_unix_epoch
 run_test "dry-run settings makes no changes" test_dry_run_settings_makes_no_changes
+run_test "first run prints installed message" test_first_run_prints_installed_message
+run_test "second run on unchanged system prints already installed" test_second_run_on_unchanged_system_prints_already_installed
+run_test "dry-run full run makes zero filesystem changes" test_dry_run_full_run_makes_zero_filesystem_changes
+run_test "README has Prerequisites section" test_readme_has_prerequisites_section
+run_test "README install section leads with script and has manual section" test_readme_install_section_leads_with_script_and_has_manual_section
 
 echo ""
 echo "${PASS_COUNT} passed, ${FAIL_COUNT} failed"
