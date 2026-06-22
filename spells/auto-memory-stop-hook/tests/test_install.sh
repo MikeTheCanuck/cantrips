@@ -332,6 +332,41 @@ test_dry_run_full_run_makes_zero_filesystem_changes() {
   return $result
 }
 
+test_invalid_json_settings_fails_safely_without_writing() {
+  local fake_home output status
+  fake_home="$(make_fake_home)"
+  mkdir -p "${fake_home}/.claude"
+  printf '{ this is not valid json' > "${fake_home}/.claude/settings.json"
+  local before
+  before="$(cat "${fake_home}/.claude/settings.json")"
+  output="$(HOME="$fake_home" "$INSTALL_SH" <<< "n" 2>&1)"
+  status=$?
+  local after
+  after="$(cat "${fake_home}/.claude/settings.json")"
+  local backup_count
+  backup_count="$(find "${fake_home}/.claude" -name 'settings.json.bak.*' | wc -l | tr -d ' ')"
+  local result=0
+  [ "$status" -ne 0 ] || { echo "    FAIL: expected nonzero exit for invalid JSON"; result=1; }
+  assert_eq "$before" "$after" "invalid settings.json must be left untouched" || result=1
+  assert_eq "0" "$backup_count" "no backup should be created when settings.json is invalid" || result=1
+  assert_contains "$output" "valid JSON" "should print a clear error mentioning valid JSON" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_unknown_argument_rejected_with_usage_and_no_writes() {
+  local fake_home output status
+  fake_home="$(make_fake_home)"
+  output="$(HOME="$fake_home" "$INSTALL_SH" --dryrun 2>&1)"
+  status=$?
+  local result=0
+  [ "$status" -ne 0 ] || { echo "    FAIL: expected nonzero exit for unknown argument"; result=1; }
+  assert_contains "$output" "Unknown argument" "should reject the unrecognized flag clearly" || result=1
+  assert_file_absent "${fake_home}/.claude/hooks/save-session-memory.sh" "unknown argument must not trigger a live install" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
 test_readme_has_prerequisites_section() {
   grep -q "^## Prerequisites" "${SPELL_DIR}/README.md"
 }
@@ -356,6 +391,8 @@ run_test "settings with other Stop hook appends not replaces" test_settings_with
 run_test "settings with no Stop key sets it and preserves other keys" test_settings_with_no_stop_key_sets_it_and_preserves_other_keys
 run_test "backup filename is ISO 8601 not Unix epoch" test_backup_filename_is_iso8601_not_unix_epoch
 run_test "dry-run settings makes no changes" test_dry_run_settings_makes_no_changes
+run_test "invalid JSON settings fails safely without writing" test_invalid_json_settings_fails_safely_without_writing
+run_test "unknown argument rejected with usage and no writes" test_unknown_argument_rejected_with_usage_and_no_writes
 run_test "first run prints installed message" test_first_run_prints_installed_message
 run_test "second run on unchanged system prints already installed" test_second_run_on_unchanged_system_prints_already_installed
 run_test "dry-run full run makes zero filesystem changes" test_dry_run_full_run_makes_zero_filesystem_changes

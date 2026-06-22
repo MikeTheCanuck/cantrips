@@ -12,8 +12,14 @@ CLAUDE_MD_SNIPPET="${SCRIPT_DIR}/claude-md-snippet.md"
 HOOK_COMMAND="bash ~/.claude/hooks/save-session-memory.sh"
 
 DRY_RUN=false
-if [ "${1:-}" = "--dry-run" ]; then
-  DRY_RUN=true
+if [ -n "${1:-}" ]; then
+  if [ "$1" = "--dry-run" ]; then
+    DRY_RUN=true
+  else
+    echo "Unknown argument: $1" >&2
+    echo "Usage: $0 [--dry-run]" >&2
+    exit 1
+  fi
 fi
 
 CHANGED=false
@@ -49,6 +55,10 @@ if [ ! -f "$SETTINGS_FILE" ]; then
   fi
   CHANGED=true
 else
+  if ! jq -e . "$SETTINGS_FILE" >/dev/null 2>&1; then
+    echo "Your ~/.claude/settings.json isn't valid JSON; fix it or merge by hand (see README)." >&2
+    exit 1
+  fi
   ALREADY_PRESENT="$(jq --arg cmd "$HOOK_COMMAND" \
     '[(.hooks.Stop // [])[] | (.hooks // [])[] | select(.command == $cmd)] | length > 0' \
     "$SETTINGS_FILE")"
