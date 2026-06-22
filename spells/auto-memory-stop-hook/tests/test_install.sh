@@ -104,9 +104,150 @@ test_dry_run_does_not_copy_hook_and_prints_would_message() {
   return $result
 }
 
+test_no_settings_file_creates_from_snippet() {
+  local fake_home
+  fake_home="$(make_fake_home)"
+  HOME="$fake_home" "$INSTALL_SH" <<< "n" >/dev/null 2>&1
+  local settings="${fake_home}/.claude/settings.json"
+  local result=0
+  assert_file_exists "$settings" "settings.json should be created" || result=1
+  local has_hook
+  has_hook="$(jq --arg cmd "bash ~/.claude/hooks/save-session-memory.sh" \
+    '[(.hooks.Stop // [])[] | (.hooks // [])[] | select(.command == $cmd)] | length > 0' "$settings")"
+  assert_eq "true" "$has_hook" "new settings.json should contain the hook" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_settings_with_hook_already_present_is_noop() {
+  local fake_home
+  fake_home="$(make_fake_home)"
+  mkdir -p "${fake_home}/.claude"
+  cp "${SPELL_DIR}/settings.snippet.json" "${fake_home}/.claude/settings.json"
+  local before
+  before="$(cat "${fake_home}/.claude/settings.json")"
+  HOME="$fake_home" "$INSTALL_SH" <<< "n" >/dev/null 2>&1
+  local after
+  after="$(cat "${fake_home}/.claude/settings.json")"
+  local result=0
+  assert_eq "$before" "$after" "settings.json should be byte-identical when hook already present" || result=1
+  local backup_count
+  backup_count="$(find "${fake_home}/.claude" -name 'settings.json.bak.*' | wc -l | tr -d ' ')"
+  assert_eq "0" "$backup_count" "no backup should be created when nothing changes" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_settings_with_other_stop_hook_appends_not_replaces() {
+  local fake_home
+  fake_home="$(make_fake_home)"
+  mkdir -p "${fake_home}/.claude"
+  cat > "${fake_home}/.claude/settings.json" <<'EOF'
+{
+  "hooks": {
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "echo other-hook" } ] }
+    ]
+  }
+}
+EOF
+  HOME="$fake_home" "$INSTALL_SH" <<< "n" >/dev/null 2>&1
+  local settings="${fake_home}/.claude/settings.json"
+  local stop_count has_other has_ours
+  stop_count="$(jq '.hooks.Stop | length' "$settings")"
+  has_other="$(jq '[.hooks.Stop[] | .hooks[] | select(.command == "echo other-hook")] | length > 0' "$settings")"
+  has_ours="$(jq --arg cmd "bash ~/.claude/hooks/save-session-memory.sh" \
+    '[.hooks.Stop[] | .hooks[] | select(.command == $cmd)] | length > 0' "$settings")"
+  local result=0
+  assert_eq "2" "$stop_count" "hooks.Stop should have both entries" || result=1
+  assert_eq "true" "$has_other" "original Stop hook should be preserved" || result=1
+  assert_eq "true" "$has_ours" "new Stop hook should be appended" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_settings_with_no_stop_key_sets_it_and_preserves_other_keys() {
+  local fake_home
+  fake_home="$(make_fake_home)"
+  mkdir -p "${fake_home}/.claude"
+  cat > "${fake_home}/.claude/settings.json" <<'EOF'
+{
+  "theme": "dark",
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "echo pre" } ] }
+    ]
+  }
+}
+EOF
+  HOME="$fake_home" "$INSTALL_SH" <<< "n" >/dev/null 2>&1
+  local settings="${fake_home}/.claude/settings.json"
+  local theme pretool_count has_ours
+  theme="$(jq -r '.theme' "$settings")"
+  pretool_count="$(jq '.hooks.PreToolUse | length' "$settings")"
+  has_ours="$(jq --arg cmd "bash ~/.claude/hooks/save-session-memory.sh" \
+    '[(.hooks.Stop // [])[] | .hooks[] | select(.command == $cmd)] | length > 0' "$settings")"
+  local result=0
+  assert_eq "dark" "$theme" "unrelated top-level key should survive" || result=1
+  assert_eq "1" "$pretool_count" "unrelated hooks.PreToolUse should survive" || result=1
+  assert_eq "true" "$has_ours" "hooks.Stop should now contain the hook" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_backup_filename_is_iso8601_not_unix_epoch() {
+  local fake_home
+  fake_home="$(make_fake_home)"
+  mkdir -p "${fake_home}/.claude"
+  echo '{"theme": "dark"}' > "${fake_home}/.claude/settings.json"
+  HOME="$fake_home" "$INSTALL_SH" <<< "n" >/dev/null 2>&1
+  local backup
+  backup="$(find "${fake_home}/.claude" -name 'settings.json.bak.*' | head -1)"
+  local result=0
+  [ -n "$backup" ] || { echo "    FAIL: expected a backup file to exist"; result=1; }
+  local suffix
+  suffix="$(basename "$backup" | sed 's/^settings\.json\.bak\.//')"
+  if [[ ! "$suffix" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z$ ]]; then
+    echo "    FAIL: backup suffix '${suffix}' is not ISO 8601 (expected e.g. 2026-06-21T14-32-05Z)"
+    result=1
+  fi
+  if [[ "$suffix" =~ ^[0-9]{10}$ ]]; then
+    echo "    FAIL: backup suffix '${suffix}' looks like a bare Unix epoch"
+    result=1
+  fi
+  rm -rf "$fake_home"
+  return $result
+}
+
+test_dry_run_settings_makes_no_changes() {
+  local fake_home output
+  fake_home="$(make_fake_home)"
+  mkdir -p "${fake_home}/.claude"
+  echo '{"theme": "dark"}' > "${fake_home}/.claude/settings.json"
+  local before
+  before="$(cat "${fake_home}/.claude/settings.json")"
+  output="$(HOME="$fake_home" "$INSTALL_SH" --dry-run 2>&1)"
+  local after
+  after="$(cat "${fake_home}/.claude/settings.json")"
+  local backup_count
+  backup_count="$(find "${fake_home}/.claude" -name 'settings.json.bak.*' | wc -l | tr -d ' ')"
+  local result=0
+  assert_eq "$before" "$after" "dry-run must not change settings.json" || result=1
+  assert_eq "0" "$backup_count" "dry-run must not create a backup" || result=1
+  assert_contains "$output" "Would back up" "dry-run should describe the settings change it would make" || result=1
+  rm -rf "$fake_home"
+  return $result
+}
+
 run_test "missing jq exits nonzero with hint" test_missing_jq_exits_nonzero_with_hint
 run_test "fresh install copies hook and sets executable" test_fresh_install_copies_hook_and_sets_executable
 run_test "dry-run does not copy hook and prints would message" test_dry_run_does_not_copy_hook_and_prints_would_message
+run_test "no settings file creates from snippet" test_no_settings_file_creates_from_snippet
+run_test "settings with hook already present is no-op" test_settings_with_hook_already_present_is_noop
+run_test "settings with other Stop hook appends not replaces" test_settings_with_other_stop_hook_appends_not_replaces
+run_test "settings with no Stop key sets it and preserves other keys" test_settings_with_no_stop_key_sets_it_and_preserves_other_keys
+run_test "backup filename is ISO 8601 not Unix epoch" test_backup_filename_is_iso8601_not_unix_epoch
+run_test "dry-run settings makes no changes" test_dry_run_settings_makes_no_changes
 
 echo ""
 echo "${PASS_COUNT} passed, ${FAIL_COUNT} failed"

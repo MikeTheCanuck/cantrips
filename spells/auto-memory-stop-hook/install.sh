@@ -38,3 +38,43 @@ else
   fi
   CHANGED=true
 fi
+
+# Step 3: settings merge
+if [ ! -f "$SETTINGS_FILE" ]; then
+  if $DRY_RUN; then
+    echo "Would create ${SETTINGS_FILE} from ${SNIPPET_FILE}"
+  else
+    mkdir -p "$CLAUDE_DIR"
+    cp "$SNIPPET_FILE" "$SETTINGS_FILE"
+  fi
+  CHANGED=true
+else
+  ALREADY_PRESENT="$(jq --arg cmd "$HOOK_COMMAND" \
+    '[(.hooks.Stop // [])[] | (.hooks // [])[] | select(.command == $cmd)] | length > 0' \
+    "$SETTINGS_FILE")"
+  if [ "$ALREADY_PRESENT" = "true" ]; then
+    : # already installed, no-op
+  else
+    TIMESTAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+    BACKUP_FILE="${SETTINGS_FILE}.bak.${TIMESTAMP}"
+    HAS_STOP="$(jq 'has("hooks") and (.hooks | has("Stop"))' "$SETTINGS_FILE")"
+    if $DRY_RUN; then
+      if [ "$HAS_STOP" = "true" ]; then
+        echo "Would back up ${SETTINGS_FILE} -> ${BACKUP_FILE}, then append this hook to its existing hooks.Stop array"
+      else
+        echo "Would back up ${SETTINGS_FILE} -> ${BACKUP_FILE}, then add hooks.Stop"
+      fi
+    else
+      cp "$SETTINGS_FILE" "$BACKUP_FILE"
+      if [ "$HAS_STOP" = "true" ]; then
+        SNIPPET_STOP_ENTRY="$(jq '.hooks.Stop[0]' "$SNIPPET_FILE")"
+        jq --argjson entry "$SNIPPET_STOP_ENTRY" '.hooks.Stop += [$entry]' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp"
+      else
+        SNIPPET_STOP="$(jq '.hooks.Stop' "$SNIPPET_FILE")"
+        jq --argjson stop "$SNIPPET_STOP" '.hooks.Stop = $stop' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp"
+      fi
+      mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+    fi
+    CHANGED=true
+  fi
+fi
