@@ -8,7 +8,8 @@ Not a framework, not a plugin system. Just a place to keep the tricks that are e
 
 | Spell | What it does |
 |---|---|
-| [auto-memory-stop-hook](spells/auto-memory-stop-hook/) | Forces Claude Code's native memory feature to actually save on every turn, instead of only when the model feels like it. |
+| [session-recap](spells/session-recap/) | Shows where you left off in this project every time you start `claude`. Summarises in the background when you quit or compact, so nothing shows up mid-session. |
+| [auto-memory-stop-hook](spells/auto-memory-stop-hook/) | Superseded by session-recap. Forces a memory check after every turn. |
 
 ## Install pattern
 
