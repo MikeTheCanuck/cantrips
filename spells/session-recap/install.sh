@@ -45,6 +45,21 @@ for script in summarize.py recap.py; do
   fi
 done
 
+# Step 2b: /recap skill (corrections/ is left alone so local feedback survives reinstalls)
+SKILL_DEST_DIR="${CLAUDE_DIR}/skills/recap"
+if [ -f "${SKILL_DEST_DIR}/SKILL.md" ] && cmp -s "${SCRIPT_DIR}/skills/recap/SKILL.md" "${SKILL_DEST_DIR}/SKILL.md"; then
+  : # already up to date
+else
+  if $DRY_RUN; then
+    echo "Would copy skills/recap/SKILL.md -> ${SKILL_DEST_DIR}/SKILL.md"
+  else
+    mkdir -p "${SKILL_DEST_DIR}/corrections"
+    cp "${SCRIPT_DIR}/skills/recap/SKILL.md" "${SKILL_DEST_DIR}/SKILL.md"
+    [ -f "${SKILL_DEST_DIR}/corrections/README.md" ] || cp "${SCRIPT_DIR}/skills/recap/corrections/README.md" "${SKILL_DEST_DIR}/corrections/README.md"
+  fi
+  CHANGED=true
+fi
+
 # Step 3: settings merge, one event at a time, appending to any existing hooks for that event
 if [ ! -f "$SETTINGS_FILE" ]; then
   if $DRY_RUN; then

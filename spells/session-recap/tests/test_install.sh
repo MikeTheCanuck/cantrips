@@ -37,6 +37,7 @@ test_fresh_install_creates_settings_and_scripts() {
   HOME="$home" bash "$INSTALL_SH" </dev/null >/dev/null || return 1
   check "summarize.py copied" test -f "$home/.claude/hooks/session-recap/summarize.py" &&
   check "recap.py copied" test -f "$home/.claude/hooks/session-recap/recap.py" &&
+  check "recap skill copied" test -f "$home/.claude/skills/recap/SKILL.md" &&
   check "one SessionEnd hook" test "$(hook_count "$home" SessionEnd)" = 1 &&
   check "one PreCompact hook" test "$(hook_count "$home" PreCompact)" = 1 &&
   check "one SessionStart hook" test "$(hook_count "$home" SessionStart)" = 1

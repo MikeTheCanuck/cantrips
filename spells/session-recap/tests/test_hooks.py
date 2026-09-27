@@ -1,10 +1,14 @@
 """Tests for the session-recap hook scripts. Run with: python3 -m unittest discover tests"""
+import contextlib
 import datetime
+import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -111,6 +115,29 @@ class RecapHookTests(unittest.TestCase):
         self.assertTrue(output["systemMessage"].startswith("Last time here (3h ago): Wiring up"))
         self.assertIn("STATE: Exporter writes CSV", output["hookSpecificOutput"]["additionalContext"])
 
+    def mark_pending(self):
+        pending_path = Path(self.transcript_path).parent / "memory" / "last_session.pending"
+        pending_path.write_text("SessionEnd")
+        return pending_path
+
+    def test_startup_while_pending_marks_note_as_updating(self):
+        self.mark_pending()
+        output = json.loads(self.run_recap({"source": "startup", "transcript_path": self.transcript_path}))
+        self.assertIn("updating in the background", output["systemMessage"])
+
+    def test_clear_shows_pointer_only_while_pending(self):
+        payload = {"source": "clear", "transcript_path": self.transcript_path}
+        self.assertEqual(self.run_recap(payload), "")
+        self.mark_pending()
+        self.assertIn("/recap", json.loads(self.run_recap(payload))["systemMessage"])
+
+    def test_stale_pending_marker_is_ignored(self):
+        pending_path = self.mark_pending()
+        an_hour_ago = time.time() - 3600
+        os.utime(pending_path, (an_hour_ago, an_hour_ago))
+        output = json.loads(self.run_recap({"source": "startup", "transcript_path": self.transcript_path}))
+        self.assertNotIn("updating", output["systemMessage"])
+
     def test_resume_and_compact_show_nothing(self):
         for source in ("resume", "compact"):
             self.assertEqual(self.run_recap({"source": source, "transcript_path": self.transcript_path}), "")
@@ -122,6 +149,35 @@ class RecapHookTests(unittest.TestCase):
     def test_missing_note_shows_nothing(self):
         payload = {"source": "startup", "transcript_path": "/nonexistent/bucket/x.jsonl"}
         self.assertEqual(self.run_recap(payload), "")
+
+
+class WaitModeTests(unittest.TestCase):
+    def test_bucket_name_matches_claude_code_convention(self):
+        self.assertEqual(recap.bucket_for_working_directory("/Users/me/code/daily-brief").name,
+                         "-Users-me-code-daily-brief")
+
+    def test_wait_returns_note_once_pending_clears(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            original_projects = recap.PROJECTS_DIRECTORY
+            recap.PROJECTS_DIRECTORY = Path(temporary_directory)
+            original_poll = recap.WAIT_POLL_SECONDS
+            recap.WAIT_POLL_SECONDS = 0.05
+            try:
+                memory_directory = recap.bucket_for_working_directory("/x/proj") / "memory"
+                memory_directory.mkdir(parents=True)
+                pending_path = memory_directory / "last_session.pending"
+                pending_path.write_text("SessionEnd")
+                (memory_directory / "last_session.md").write_text(
+                    SAMPLE_NOTE.format(written_at=datetime.datetime.now().astimezone().isoformat()))
+                threading.Timer(0.3, pending_path.unlink).start()
+                captured = io.StringIO()
+                with contextlib.redirect_stdout(captured):
+                    recap.run_wait("/x/proj")
+            finally:
+                recap.PROJECTS_DIRECTORY = original_projects
+                recap.WAIT_POLL_SECONDS = original_poll
+        self.assertTrue(captured.getvalue().startswith("Last time here (0m ago): Wiring up"))
+        self.assertNotIn("still updating", captured.getvalue())
 
 
 if __name__ == "__main__":

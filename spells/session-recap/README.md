@@ -22,6 +22,12 @@ Three hooks, none of which ever puts anything in your session while you're worki
 
 Each project folder has its own memory bucket, so each project gets its own recap.
 
+## /clear, and the one-minute gap
+
+The summary takes 15 to 60 seconds, but `/clear` starts the new session instantly. So while a summary is still being written, `summarize.py` leaves a `last_session.pending` marker, and the recap adjusts. After `/clear` you get one line ("Recap of what you just cleared is being written. /recap shows it when it's ready.") instead of a stale recap of a conversation you were literally just in. A quick quit-and-restart shows the previous note with an "updating" tag.
+
+Type `/recap` whenever you want it. It waits for the background summary to finish (up to about two minutes), then shows the fresh note and asks whether to pick the thread back up. I `/clear` constantly, so this is the one I actually use.
+
 ## Adding your own lines
 
 Drop an `extra-prompt.md` next to the scripts in `~/.claude/hooks/session-recap/` and the summariser will add whatever lines it describes, in the same `KEY: value` format. The recap shows any extra line that isn't "none". Mine asks whether the session produced anything worth sharing with my work setup:
@@ -40,7 +46,7 @@ BRIDGE: <if this session produced something worth sharing with my work notes, na
 ./install.sh
 ```
 
-Copies both scripts into `~/.claude/hooks/session-recap/`, backs up your `settings.json`, and adds the three hooks alongside whatever hooks you already have. If it finds the old auto-memory-stop-hook `Stop` hook, it asks whether to remove it. Safe to re-run. `./install.sh --dry-run` shows what it would do without touching anything.
+Copies both scripts into `~/.claude/hooks/session-recap/` and the `/recap` skill into `~/.claude/skills/recap/`, backs up your `settings.json`, and adds the three hooks alongside whatever hooks you already have. If it finds the old auto-memory-stop-hook `Stop` hook, it asks whether to remove it. Safe to re-run. `./install.sh --dry-run` shows what it would do without touching anything.
 
 Tests: `python3 -m unittest discover tests` for the hook scripts, `bash tests/test_install.sh` for the installer (runs against a throwaway `$HOME`).
 

@@ -24,6 +24,7 @@ HOOK_DIRECTORY = Path(__file__).resolve().parent
 LOG_PATH = HOOK_DIRECTORY / "recap.log"
 EXTRA_PROMPT_PATH = HOOK_DIRECTORY / "extra-prompt.md"
 NOTE_FILENAME = "last_session.md"
+PENDING_FILENAME = "last_session.pending"
 MINIMUM_USER_PROMPTS = 2
 EXCERPT_CHARACTER_LIMIT = 40_000
 SUMMARIZER_MODEL = "haiku"
@@ -104,6 +105,10 @@ def run_hook():
         log("claude binary not found on PATH; skipping")
         return
     payload["claude_binary"] = claude_binary
+    memory_directory = Path(payload.get("transcript_path", "")).parent / "memory"
+    if memory_directory.parent.is_dir():
+        memory_directory.mkdir(exist_ok=True)
+        (memory_directory / PENDING_FILENAME).write_text(payload.get("hook_event_name", "?"))
     handle, payload_path = tempfile.mkstemp(prefix="recap-", suffix=".json")
     with os.fdopen(handle, "w") as payload_file:
         json.dump(payload, payload_file)
@@ -121,6 +126,14 @@ def run_worker(payload_path):
     with open(payload_path) as payload_file:
         payload = json.load(payload_file)
     os.unlink(payload_path)
+    pending_path = Path(payload.get("transcript_path", "")).parent / "memory" / PENDING_FILENAME
+    try:
+        summarize_session(payload)
+    finally:
+        pending_path.unlink(missing_ok=True)
+
+
+def summarize_session(payload):
     transcript_path = Path(payload.get("transcript_path", ""))
     event = payload.get("hook_event_name", "?")
     if not transcript_path.is_file():
